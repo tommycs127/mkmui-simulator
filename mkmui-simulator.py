@@ -2,6 +2,7 @@ import asyncio
 import discord
 import random
 import time
+import unicodedata
 
 
 class Name(object):
@@ -17,14 +18,14 @@ class Name(object):
     def get(self, no_measure=False):
         if not no_measure:
             if self.classifier_multiple != '' and random.randint(0,1):
-                if random.randint(0,3):
-                    return self.classifier_multiple + self.content
-                return '你哋' + self.classifier_multiple + self.content
+                if random.randint(0,1):
+                    return '你哋呢' + self.classifier_multiple + self.content
+                return self.classifier_multiple + self.content
             
             elif self.classifier_single != '' and random.randint(0,1):
-                if random.randint(0,3):
-                    return self.classifier_single + self.content
-                return '你' + self.classifier_single + self.content
+                if random.randint(0,1):
+                    return '你呢' + self.classifier_single + self.content
+                return self.classifier_single + self.content
             
             return self.content
         return self.content
@@ -36,31 +37,60 @@ class Sentence(object):
     suffix = False
     particle = ''
     no_measure = False
-    name = [
+    no_pronoun = False
+    names = [
         Name('毒撚', classifier_single='個', classifier_multiple='啲'),
+        Name('死毒撚', classifier_single='個', classifier_multiple='啲'),
         Name('柒頭', classifier_single='條', classifier_multiple='啲'),
         Name('on9', classifier_single='條', classifier_multiple='啲'),
         Name('單身狗', classifier_single='隻', classifier_multiple='啲'),
+        Name('處男', classifier_single='個', classifier_multiple='啲'),
+        Name('青頭仔', classifier_single='個', classifier_multiple='啲'),
+        Name('變態佬', classifier_single='個', classifier_multiple='啲'),
+        Name('死變態佬', classifier_single='個', classifier_multiple='啲'),
+    ]
+    name_pronouns = [
         Name('你'),
+        Name('你哋'),
     ]
     emoji = ['7.7', '7.777', '：）', '：（']
     
-    def __init__(self, content, prefix=False, suffix=False, particle='', no_measure=False):
+    def __init__(self, content, prefix=False, suffix=False, particle='', no_measure=False, no_pronoun=False):
         self.content = content
         self.prefix = prefix
         self.suffix = suffix
         self.particle = particle
         self.no_measure = no_measure
+        self.no_pronoun = no_pronoun
         
     def get(self):
         final_content = self.content
         
+        name_list = self.names
+        if not self.no_pronoun:
+            name_list += self.name_pronouns
+            
+        name_ = random.choice(name_).get(no_measure=self.no_measure)
+        
         if self.suffix and random.randint(0,1):
             if self.particle != '':
                 final_content += self.particle
-            final_content += random.choice(self.name).get(no_measure=self.no_measure)
+                
+            # Add space if it is two half-width characters joining
+            half_to_half = unicodedata.east_asian_width(final_content[-1]) != 'F' and unicodedata.east_asian_width(name_[0]) != 'F'
+            
+            if half_to_half:
+                final_content += ' '
+                
+            final_content += name_
         elif self.prefix:
-            final_content = random.choice(self.name).get(no_measure=self.no_measure) + final_content
+            # Add space if it is two half-width characters joining
+            half_to_half = unicodedata.east_asian_width(final_content[0]) != 'F' and unicodedata.east_asian_width(name_[-1]) != 'F'
+            
+            final_content += name_
+            
+            if half_to_half:
+                final_content += ' '
             
         if random.randint(0,1):
             final_content += ' ' + random.choice(self.emoji)
@@ -71,14 +101,15 @@ class Sentence(object):
 class Fake_MKMui(discord.Client):
     replies = [
         Sentence('唔想理你'),
-        
         Sentence('dont ff', prefix=True, no_measure=True),
+        Sentence('LAAN', prefix=True, suffix=True, particle='啦', no_measure=True),
         Sentence('收皮', prefix=True, suffix=True, particle='啦', no_measure=True),
         Sentence('食屎', prefix=True, suffix=True, particle='啦', no_measure=True),
+        Sentence('死開', prefix=True, suffix=True, particle='啦', no_measure=True),
+        Sentence('躝開', prefix=True, suffix=True, particle='啦', no_measure=True),
         Sentence('真係好撚恐怖', prefix=True),
-        
-        Sentence('關我咩事呢', suffix=True, no_measure=True),
-        Sentence('關你咩事呢', suffix=True, no_measure=True),
+        Sentence('關我咩事呢', suffix=True, no_measure=True, no_pronoun=True),
+        Sentence('關你咩事呢', suffix=True, no_measure=True, no_pronoun=True),
         Sentence('瞓啦', suffix=True, no_measure=True),
     ]
 
