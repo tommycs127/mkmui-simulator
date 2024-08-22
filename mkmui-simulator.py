@@ -1,5 +1,6 @@
 import discord
 import random
+import re
 import time
 import unicodedata
 
@@ -47,7 +48,7 @@ class Sentence:
             Name('死變態佬', '個', '啲')
         ]
         self.name_pronouns = [Name('你'), Name('你哋')]
-        self.emoji = ['7.7', '7.777', ':)', ':(', '</3']
+        self.emoji = ['7.7', '7.777', ':)', ':(', '</3', r'\\./', 'T^T']
         self.random_generator = random.Random()
 
     def flip_coin(self):
@@ -98,13 +99,16 @@ class Fake_MKMui:
         self.replies = [
             Sentence('OK 898', False, False, '', False, False, True),
             Sentence('唔想理你', False, False, '', False, False, False),
+            Sentence('八八冇LU', False, False, '', False, False, False),
             Sentence('dont ff', True, False, 'la', True, False, False),
             Sentence('LAAN', True, True, '啦', True, False, True),
             Sentence('收皮', True, True, '啦', True, False, False),
             Sentence('食屎', True, True, '啦', True, False, False),
             Sentence('死開', True, True, '啦', True, False, False),
             Sentence('躝開', True, True, '啦', True, False, False),
+            Sentence('畀錢我先', True, True, '啦', True, False, False),
             Sentence('真係好撚恐怖', True, False, '', False, False, False),
+            Sentence('真係好撚kam', True, False, '', False, False, False),
             Sentence('關我咩事呢', False, True, '', True, True, False),
             Sentence('關你咩事呢', False, True, '', True, True, False),
             Sentence('關你哋咩事呢', False, True, '', True, True, False),
@@ -115,34 +119,51 @@ class Fake_MKMui:
             Sentence('jm9', False, False, '??', True, True, False),
         ]
         self.replies_discord = [
-            Sentence(':thumbsup:', False, False, '', False, False, True),
+            Sentence(':middle_finger:', False, False, '', False, False, True),
             Sentence(':thumbsdown:', False, False, '', False, False, True)
+        ]
+        self.replies_greeting = [
+            Sentence('瞓啦柒頭', False, False, '', True, True, False),
+            Sentence('瞓啦染頭', False, False, '', True, True, False),
+        ]
+        self.replies_greeting_hi = [
+            Sentence('閪佬', False, True, '', True, True, False),
         ]
         self.random_generator = random.Random()
     
     @property
     def keywords(self):
-        return ['$娘娘', '$mk妹']
+        return ['$娘娘', '$牙娘', '$阿娘', '$mk妹']
         
     def read(self, input_string):
         for keyword in self.keywords:
             if input_string.lower().startswith(keyword):
                 return input_string[len(keyword):].strip()
         return None  # Not triggered
+        
+    def __pick(self, L):
+        return L[self.random_generator.randint(0, len(L) - 1)].get()
 
     def reply(self, discord):
         all_replies = self.replies.copy()
         if discord:
             all_replies.extend(self.replies_discord)
-        return all_replies[self.random_generator.randint(0, len(all_replies) - 1)].get()
+        return self.__pick(all_replies)
 
     def reply_to_empty(self):
-        return self.replies_to_empty[self.random_generator.randint(0, len(self.replies_to_empty) - 1)].get()
+        return self.__pick(self.replies_to_empty)
+        
+    def reply_to_greeting(self, hi=True):
+        replies_greeting = self.replies_greeting
+        if hi:
+            replies_greeting.extend(self.replies_greeting_hi)
+        return self.__pick(replies_greeting)
 
 
 class Fake_MKMui_deploy(discord.Client):
     def __init__(self, *args, **kwargs):
         self.fake_mkmui = Fake_MKMui()
+        self.memory = dict()
         super().__init__(*args, **kwargs)
 
     async def on_ready(self):
@@ -158,12 +179,28 @@ class Fake_MKMui_deploy(discord.Client):
         if message.author == self.user:
             return
             
+        if isinstance(message.channel, discord.DMChannel):
+            if message.content.strip():
+                self.memory[message.author] = message.content
+                await message.reply(f'下次覆你就會講呢句！', mention_author=False)
+            else:
+                await message.reply(f'屌你係咪唔識打字 7.777', mention_author=False)
+            return
+            
         read_content = self.fake_mkmui.read(message.content)
         if read_content is None:
             return
             
         if read_content:
-            await message.reply(self.fake_mkmui.reply(False), mention_author=False)
+            if message.author in self.memory:
+                await message.reply(self.memory.pop(message.author), mention_author=False)
+            else:
+                match = re.search(r'早(?:(晨|安|上好)|(抖|唞))?', read_content)
+                is_hi = not bool(match.group(2))
+                if match:
+                    await message.reply(self.fake_mkmui.reply_to_greeting(is_hi), mention_author=False)
+                else:
+                    await message.reply(self.fake_mkmui.reply(True), mention_author=False)
         else:
             await message.reply(self.fake_mkmui.reply_to_empty(), mention_author=False)
         
