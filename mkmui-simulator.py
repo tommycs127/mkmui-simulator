@@ -191,8 +191,8 @@ class Fake_MKMui_deploy(discord.Client):
             content = message.content.strip()
             if content:
                 if content == '$del':
-                    if user in self.memory:
-                        del self.memory[user]
+                    if message.author in self.memory:
+                        del self.memory[message.author]
                         await message.reply(f'del 鳥！下次覆你唔會講呢句嘢！', mention_author=False)
                     else:
                         await message.reply(f'冇任何資料 7.7', mention_author=False)
