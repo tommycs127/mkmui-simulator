@@ -125,9 +125,15 @@ class Fake_MKMui:
         self.replies_greeting = [
             Sentence('瞓啦柒頭', False, False, '', True, True, False),
             Sentence('瞓啦染頭', False, False, '', True, True, False),
+            Sentence('瞓啦', False, True, '', True, False, False),
         ]
         self.replies_greeting_hi = [
             Sentence('閪佬', False, True, '', True, True, False),
+            Sentence('hi', False, True, '', True, True, False),
+        ]
+        self.replies_greeting_bye = [
+            Sentence('898', False, False, '', True, True, False),
+            Sentence('bibi', True, True, '', True, True, False),
         ]
         self.random_generator = random.Random()
     
@@ -153,10 +159,12 @@ class Fake_MKMui:
     def reply_to_empty(self):
         return self.__pick(self.replies_to_empty)
         
-    def reply_to_greeting(self, hi=True):
-        replies_greeting = self.replies_greeting
-        if hi:
+    def reply_to_greeting(self, type_=''):
+        replies_greeting = self.replies_greeting.copy()
+        if type_ == 'hi':
             replies_greeting.extend(self.replies_greeting_hi)
+        elif type_ == 'bye':
+            replies_greeting.extend(self.replies_greeting_bye)
         return self.__pick(replies_greeting)
 
 
@@ -178,27 +186,37 @@ class Fake_MKMui_deploy(discord.Client):
     async def on_message(self, message):
         if message.author == self.user:
             return
-            
+
         if isinstance(message.channel, discord.DMChannel):
-            if message.content.strip():
-                self.memory[message.author] = message.content
-                await message.reply(f'下次覆你就會講呢句！', mention_author=False)
+            content = message.content.strip()
+            if content:
+                if content == '$del':
+                    if user in self.memory:
+                        del self.memory[user]
+                        await message.reply(f'del 鳥！下次覆你唔會講呢句嘢！', mention_author=False)
+                    else:
+                        await message.reply(f'冇任何資料 7.7', mention_author=False)
+                else:
+                    self.memory[message.author] = message.content
+                    await message.reply(f'下次覆你就會講呢句！', mention_author=False)
             else:
                 await message.reply(f'屌你係咪唔識打字 7.777', mention_author=False)
             return
-            
+
         read_content = self.fake_mkmui.read(message.content)
         if read_content is None:
             return
-            
+
         if read_content:
             if message.author in self.memory:
                 await message.reply(self.memory.pop(message.author), mention_author=False)
             else:
-                match = re.search(r'早(?:(晨|安|上好)|(抖|唞))?', read_content)
-                is_hi = not bool(match.group(2))
-                if match:
-                    await message.reply(self.fake_mkmui.reply_to_greeting(is_hi), mention_author=False)
+                greeting_hi_match = re.search(r'(早(?:晨|安|上好))|(^午安$)|(^好$)|(晚上好$)|(^hi$)|(^hello$)', read_content, re.IGNORECASE)
+                greeting_bye_match = re.search(r'(早(?:抖|唞))|(晚(?:安))|(^8(?:9)?8+$)', read_content)
+                if greeting_hi_match:
+                    await message.reply(self.fake_mkmui.reply_to_greeting(type_='hi'), mention_author=False)
+                elif greeting_bye_match:
+                    await message.reply(self.fake_mkmui.reply_to_greeting(type_='bye'), mention_author=False)
                 else:
                     await message.reply(self.fake_mkmui.reply(True), mention_author=False)
         else:
