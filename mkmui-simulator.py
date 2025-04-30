@@ -358,7 +358,7 @@ class Fake_MKMui_deploy(discord.Client):
             return
         
         # Default behaviour        
-        greeting_hi_match = re.search(r'(^早+(?:晨|安|上好|呀|啊|吖)?$)|(^午安$)|(^晚上好$)|(^你好$)|(^hi$)|(^hello$)', read_content, re.IGNORECASE)
+        greeting_hi_match = re.search(r'(^早+(?:晨|安|上好|呀|啊|吖)?($|[,!，！]))|(^午安$)|(^晚上好$)|(^你好$)|(^hi$)|(^hello$)', read_content, re.IGNORECASE)
         greeting_bye_match = re.search(r'(早(?:抖|唞))|(晚(?:安))|(^8(?:9)?8+$)|(^bye$)|(^(?:bye)?(?:bi)+$)', read_content)
         greeting_gura_match = re.search(r'(gura\b)|(\bgura)', read_content, re.IGNORECASE)
         if greeting_hi_match:
