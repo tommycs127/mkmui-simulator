@@ -1,44 +1,19 @@
 import discord
-import random
+import json
+import os
 import re
 import time
-import unicodedata
 
-from collections import deque, defaultdict
+from collections import deque
 from datetime import datetime, timedelta, timezone
 from discord.ext import tasks
+from functools import cached_property
 
-
-def not_same_width(s1: str, s2: str) -> bool:
-    _ = unicodedata.east_asian_width
-    return _(s1[-1]) != _(s2[0])
-
-def both_ascii(s1: str, s2: str) -> bool:
-    _ = unicodedata.east_asian_width
-    # Ref for east_asian_width's results:
-    # https://www.unicode.org/reports/tr44/#Validation_of_Enumerated
-    mathces = ('F', 'W', 'A')
-    return _(s1[-1]) not in mathces and _(s2[0]) not in mathces
-
-def join_string(s1: str, s2: str, condition=both_ascii) -> str:
-    return s1 + ' ' + s2 if condition(s1, s2) else s1 + s2
-
-def normalize_ascii_cjk_spacing(string: str) -> str:
-    if not string:
-        return string
-    
-    normalized_string = string[0]
-    for idx in range(1, len(string)):
-        normalized_string = join_string(
-            normalized_string, string[idx], not_same_width
-        )
-    return normalized_string
-    
-def flip_coin() -> int:
-    return random.randint(0, 1)
-    
-def random_choice(list_: list) -> object:
-    return random.choice(list_)
+from misc.config import validate_time_format_json
+from misc.random import flip_coin, random_choice
+from misc.string import (
+    not_same_width, both_ascii, join_string, normalize_ascii_cjk_spacing
+)
 
 
 class Name:
@@ -113,7 +88,7 @@ class Sentence:
         }
 
     def get(self) -> str:
-        final_content = self.content
+        final = self.content
         name_list = self.names.copy()
         if not self.no_pronoun:
             name_list.extend(self.name_pronouns)
@@ -124,25 +99,50 @@ class Sentence:
         
         if self.suffixes and add_suffix:
             suffix = random_choice(self.suffixes)
-            final_content = join_string(final_content, suffix, both_ascii)
+            final = join_string(final, suffix, both_ascii)
         
         if self.name_at_end and add_suffix and flip_coin():
-            final_content = join_string(final_content, name_, both_ascii)
+            final = join_string(final, name_, both_ascii)
                 
         elif self.name_at_front:
-            final_content = join_string(name_, final_content, both_ascii)
+            final = join_string(name_, final, both_ascii)
         
         if self.emoji_type and flip_coin():
             emoji_type_ = random_choice(self.emoji_type)
             emoji_ = random_choice(self.emoji[emoji_type_])
-            final_content = join_string(final_content, emoji_, both_ascii)
+            final = join_string(final, emoji_, both_ascii)
         
-        return final_content
+        return final
 
 
 class Fake_MKMui:
-    def __init__(self):
-        self.replies = [
+    def __init__(self, settings: dict = dict()):
+        if not isinstance(settings, dict):
+            settings = dict()
+        self.load_settings(settings)
+        
+        # {user_id: dict}
+        # the dictionary (as value) can contain the following keys:
+        # - message: str; for the custom message
+        # - annoyance: deque; deque of datetime objects
+        # - ignore_until: datetime; when to stop ignoring the user
+        # - last_modified: datetime
+        self.memory = dict()
+            
+    def load_settings(self, settings: dict = dict()) -> None:
+        self.annoyance_limit = settings.get('annoyance_limit', 8)
+        
+        time_window = settings.get('time_window', dict())
+        if validate_time_format_json(time_window):
+            self.time_window = timedelta(**time_window)
+            
+        punishment_duration = settings.get('punishment_duration', dict())
+        if validate_time_format_json(punishment_duration):
+            self.punishment_duration = timedelta(**punishment_duration)
+    
+    @property
+    def replies(self) -> list[Sentence]:
+        return [
             Sentence('OK 898', False, False, [], False, False, ['mock']),
             Sentence('唔想理你', False, False, [], False, False, ['sad', 'mock', 'angry']),
             Sentence('八八冇LU', False, False, [], False, False, ['mock']),
@@ -152,9 +152,9 @@ class Fake_MKMui:
             Sentence('食屎', True, True, ['啦', 'la'], True, False, ['mock', 'angry']),
             Sentence('死開', True, True, ['啦', 'la'], True, False, ['mock', 'angry']),
             Sentence('躝開', True, True, ['啦', 'la'], True, False, ['mock', 'angry']),
-            Sentence('比錢我先', True, True, ['啦', 'la'], True, False, ['mock']),
-            Sentence('送樓比我先', True, True, ['啦', 'la'], True, False, ['mock']),
-            Sentence('送車比我先', True, True, ['啦', 'la'], True, False, ['mock']),
+            Sentence('比錢我未', True, True, ['啦', 'la'], True, False, ['mock']),
+            Sentence('送樓比我未', True, True, ['啦', 'la'], True, False, ['mock']),
+            Sentence('送車比我未', True, True, ['啦', 'la'], True, False, ['mock']),
             Sentence('真係好撚恐怖', True, True, ['囉', 'lor'], False, False, ['sad', 'mock']),
             Sentence('真係好撚kam', True, True, ['啊'], False, False, ['mock']),
             Sentence('關我咩事', False, True, ['呢'], True, True, ['mock']),
@@ -163,35 +163,62 @@ class Fake_MKMui:
             Sentence('瞓啦', False, True, [], True, False, ['mock']),
         ]
         
-        self.replies_to_empty = [
+    @property
+    def replies_to_empty(self) -> list[Sentence]:
+        return [
             Sentence('??', False, False, [], True, True, []),
             Sentence('jm9', False, False, ['??'], True, True, []),
         ]
         
-        self.replies_discord = [
+    @property
+    def replies_discord(self) -> list[Sentence]:
+        return [
             Sentence(':middle_finger:', False, False, [], False, False, []),
             Sentence(':thumbsdown:', False, False, [], False, False, []),
         ]
         
-        self.replies_greeting = [
+    @property
+    def replies_salutation(self) -> list[Sentence]:
+        return [
             Sentence('瞓啦柒頭', False, False, ['zzz'], True, True, ['mock']),
             Sentence('瞓啦染頭', False, False, ['zzz'], True, True, ['mock']),
             Sentence('瞓啦', False, False, ['zzz'], True, False, ['mock']),
         ]
         
-        self.replies_greeting_bye = [
+    @property
+    def replies_greeting(self) -> list[Sentence]:
+        return [
+            Sentence('閪佬', True, True, [], True, True, ['mock']),
+            Sentence('hi', True, True, [], True, True, ['mock']),
+        ]
+    
+    @property
+    def replies_parting(self) -> list[Sentence]:
+        return [
             Sentence('bye', True, True, [], True, True, ['mock']),
             Sentence('898', True, True, [], True, True, ['mock']),
             Sentence('bibi', True, True, [], True, True, ['mock']),
             Sentence('八八冇LU', False, False, [], False, False, ['mock']),
         ]
         
-        self.replies_greeting_hi = [
-            Sentence('閪佬', True, True, [], True, True, ['mock']),
-            Sentence('hi', True, True, [], True, True, ['mock']),
-        ] + self.replies_greeting_bye
+    @cached_property
+    def replies_greeting_final(self) -> list[Sentence]:
+        return (
+            self.replies_salutation
+            + self.replies_greeting
+            + self.replies_parting
+        )
         
-        self.replies_gura = [
+    @cached_property
+    def replies_parting_final(self) -> list[Sentence]:
+        return (
+            self.replies_salutation
+            + self.replies_parting
+        )
+        
+    @property
+    def replies_gura(self) -> list[Sentence]:
+        return [
             Sentence('gura…', False, False, [], True, True, ['sad']),
             Sentence('好掛住gura', False, False, ['…'], True, True, ['sad']),
             Sentence('gura我老婆', False, False, [], True, True, ['love']),
@@ -199,30 +226,129 @@ class Fake_MKMui:
             Sentence(':shark:', False, False, [], True, True, ['love']),
         ]
         
-        self.random_generator = random.Random()
+    @property
+    def custom_actions(self) -> dict:
+        return {
+            'greeting': {
+                'regex': r'(^早+(?:$|晨|安|上好|呀|啊|吖|[.,!。，！]))|(^午安$)|(^晚上好$)|(^你好$)|(^hi$)|(^hello$)',
+                'action': self.reply_to_greeting,
+            },
+            'parting': {
+                'regex': r'(早(?:抖|唞))|(晚(?:安))|(^8(?:9)?8+$)|(^bye$)|(^(?:bye)?(?:bi)+$)',
+                'action': self.reply_to_parting,
+            },
+            'gura': {
+                'regex': r'(gura\b)|(\bgura)',
+                'action': self.reply_to_gura,
+            },
+        }
     
     @property
     def keywords(self) -> list[str]:
         return ['$娘娘', '$牙娘', '$阿娘', '$mk妹']
         
+    def acknowledge_user(self, user_id: int):
+        if not self.remember(user_id):
+            self.memory[user_id] = {
+                'message': None,
+                'annoyance': deque(),
+                'ignore_until': None,
+                'last_modified': None,
+            }
+        self.memory[user_id]['last_modified'] = datetime.now(timezone.utc)
+        
+    def remember(self, user_id: int) -> bool:
+        return user_id in self.memory
+    
+    def remember_custom_message(
+        self,
+        user_id: int,
+        message: str
+    ) -> None:
+        self.memory[user_id]['message'] = message
+        
+    def recall_custom_message(
+        self,
+        user_id: int
+    ) -> bool or None:
+        return self.memory[user_id].pop('message', None)
+        
+    def update_annoyance(self, user_id: int) -> None:
+        now = datetime.now(timezone.utc)
+        annoyance = self.memory[user_id]['annoyance']
+        ignore_until = self.memory[user_id].get('ignore_until', None)
+        
+        if isinstance(ignore_until, datetime) and not self.is_annoyed(user_id):
+            self.unignore(user_id)
+        
+        # Remove timestamps outside the time window
+        while annoyance and now - annoyance[0] > self.time_window:
+            annoyance.popleft()
+            
+        annoyance.append(now)
+        
+        # Punish users that spammed the bot
+        if len(annoyance) > self.annoyance_limit:
+            self.ignore(user_id)
+            
+    def is_annoyed(self, user_id: int) -> bool:
+        ignore_until = self.memory[user_id].get('ignore_until', None)
+        
+        if not isinstance(ignore_until, datetime):
+            return False
+        
+        return datetime.now(timezone.utc) < ignore_until
+        
+    def ignore(self, user_id: int) -> None:
+        now = datetime.now(timezone.utc)
+        self.memory[user_id]['ignore_until'] = now + self.punishment_duration
+        
+    def unignore(self, user_id: int) -> None:
+        if 'ignore_until' in self.memory[user_id]:
+            del self.memory[user_id]['ignore_until']
+        
     def read(self, message: str, keyword_required: bool = True) -> str or None:
-        input_string = message.content
         
         # Return the string if keyword check is not needed
         if not keyword_required:
-            return normalize_ascii_cjk_spacing(input_string)
+            return normalize_ascii_cjk_spacing(message)
         
         # If not, check if the message starts with a keyword
         for keyword in self.keywords:
-            if input_string.lower().startswith(keyword):
+            if message.lower().startswith(keyword):
                 return normalize_ascii_cjk_spacing(
-                    input_string[len(keyword):].strip()
+                    message[len(keyword):].strip()
                 )
         
         # Otherwise, return None to ignore the message
         return None
+        
+    def reply(
+        self,
+        message: str,
+        discord: bool = False,
+        user_id: int or None = None
+    ) -> str:
+        # Return a specific message to any non-string object
+        # or empty message
+        if not (isinstance(message, str) and message):
+            return self.reply_to_empty()
+            
+        # Return the custom message from memory if exists
+        if self.remember(user_id) and 'message' in self.memory[user_id]:
+            custom_message = self.recall_custom_message(user_id)
+            if custom_message:
+                return custom_message
+            
+        # Return a specific message if it meets a custom condition
+        for type_, condition in self.custom_actions.items():
+            if re.search(condition.get('regex', ''), message, re.IGNORECASE):
+                return condition.get('action', lambda:'')()
+                
+        # Default behaviour
+        return self.reply_generic(discord)
 
-    def reply(self, discord: bool = False) -> str:
+    def reply_generic(self, discord: bool = False) -> str:
         all_replies = self.replies.copy()
         if discord:
             all_replies.extend(self.replies_discord)
@@ -231,13 +357,11 @@ class Fake_MKMui:
     def reply_to_empty(self) -> str:
         return random_choice(self.replies_to_empty).get()
         
-    def reply_to_greeting(self, type_: str = '') -> str:
-        replies_greeting = self.replies_greeting.copy()
-        if type_ == 'hi':
-            replies_greeting.extend(self.replies_greeting_hi)
-        elif type_ == 'bye':
-            replies_greeting.extend(self.replies_greeting_bye)
-        return random_choice(replies_greeting).get()
+    def reply_to_greeting(self) -> str:
+        return random_choice(self.replies_greeting_final).get()
+        
+    def reply_to_parting(self) -> str:
+        return random_choice(self.replies_parting_final).get()
     
     def reply_to_gura(self) -> str:
         return random_choice(self.replies_gura).get()
@@ -247,32 +371,7 @@ class Fake_MKMui_deploy(discord.Client):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        self.fake_mkmui = Fake_MKMui()
-        self.memory = dict()
-        
-        # Settings
-        
-        default_settings = {
-            'trigger_limit': 8,  # max number of triggers
-            'time_window': timedelta(minutes=1),  # time window size
-            'punishment_duration': timedelta(minutes=1),
-        }
-        
-        # Fill the blanks in received settings using default values
-        settings = kwargs.get('settings') or dict()
-        for key, default_value in default_settings.items():
-            if key not in settings or settings[key] is None:
-                settings[key] = default_value
-        
-        self.trigger_limit = settings.get('trigger_limit')
-        self.time_window = settings.get('time_window')
-        self.punishment_duration = settings.get('time_window')
-        
-        # {user_id: deque of datetime objects}
-        self.trigger_history = defaultdict(deque)
-        
-        # {user_id: datetime}
-        self.ignore_until = dict()
+        self.fake_mkmui = Fake_MKMui(settings=kwargs.get('settings', None))
     
     async def on_ready(self):
         print(f'{self.user}駕到！')
@@ -282,96 +381,87 @@ class Fake_MKMui_deploy(discord.Client):
         raise RuntimeError('Disconnected.')
     
     async def on_message(self, message):
-        keyword_required = True
-        
         # Ignore messages from the bot itself to prevent loops
         if message.author == self.user:
             return
+            
+        self.fake_mkmui.acknowledge_user(message.author.id)
+        user_id = message.author.id
 
         # Check if the message is a direct message
         if isinstance(message.channel, discord.DMChannel):
-            content = message.content.strip()
-            if not content:
-                await message.reply(f'屌你係咪唔識打字 7.777', mention_author=False)
+            dm_message = message.content.strip()
+            if not dm_message:
+                await message.reply(
+                    f'屌你係咪唔識打字 7.777',
+                    mention_author=False
+                )
                 return
                 
-            if content.lower() == '$del':
-                if message.author in self.memory:
-                    del self.memory[message.author]
-                    await message.reply(f'鏟鳥！下次覆你唔會講呢句嘢！', mention_author=False)
+            if dm_message.lower() == '$del':
+                if (
+                    self.fake_mkmui.remember(user_id)
+                    and self.fake_mkmui.memory[user_id].get('message', None)
+                ):
+                    self.fake_mkmui.recall_custom_message(user_id)
+                    await message.reply(
+                        f'鏟鳥！下次覆你唔會講呢句嘢！',
+                        mention_author=False
+                    )
                     return
-                await message.reply(f'冇任何資料 7.7', mention_author=False)
+                await message.reply(
+                    f'冇任何資料 7.7',
+                    mention_author=False
+                )
                 return
                 
-            self.memory[message.author] = message.content
-            await message.reply(f'下次覆你就會講呢句！', mention_author=False)    
+            self.fake_mkmui.remember_custom_message(user_id, message.content)
+            await message.reply(f'下次覆你就會講呢句！', mention_author=False)
             return
             
         # Check if the message is a reply
-        if message.reference and isinstance(message.reference.resolved, discord.Message):
+        # If so, keywords are not required in order to trigger the bot
+        keyword_required = True
+        
+        if (
+            message.reference
+            and isinstance(message.reference.resolved, discord.Message)
+        ):
             replied_message = message.reference.resolved
             # Check if the replied-to message was sent by the bot
             if replied_message.author == self.user:
                 keyword_required = False
         
-        await self.trigger(message, keyword_required)
-    
-    async def trigger(self, message, keyword_required):
-        now = datetime.now(timezone.utc)
-        user_id = message.author.id
-        history = self.trigger_history[user_id]
+        read_content = self.fake_mkmui.read(message.content, keyword_required)
         
-        # Ignore users who are in punishment period
-        if user_id in self.ignore_until:
-            if now < self.ignore_until[user_id]:
-                return  # silently ignore
-            del self.ignore_until[user_id]  # remove expired punishment
-        
-        # Remove timestamps outside the time window
-        while history and now - history[0] > self.time_window:
-            history.popleft()
+        # Check if the bot must react to the message
+        if isinstance(read_content, str):
+            is_annoyed_before = self.fake_mkmui.is_annoyed(user_id)
+            self.fake_mkmui.update_annoyance(user_id)
+            is_annoyed_after = self.fake_mkmui.is_annoyed(user_id)
             
-        # Punish users that spammed the bot
-        if len(history) >= self.trigger_limit:
-            self.ignore_until[user_id] = now + self.punishment_duration
-            await message.reply(f'少煩 :(\n到 <t:{int(self.ignore_until[user_id].timestamp())}:T> 先理你', mention_author=False)
+            if is_annoyed_before or is_annoyed_after:
+                if not is_annoyed_before and is_annoyed_after:
+                    until = self.fake_mkmui.memory[user_id]['ignore_until']
+                    await message.reply(
+                        f'少煩 :(\n到 <t:{int(until.timestamp())}:T> 先理你',
+                        mention_author=False
+                    )
+                return
+            
+            await message.reply(
+                self.fake_mkmui.reply(
+                    read_content,
+                    discord=True,
+                    user_id=user_id,
+                ),
+                mention_author=False
+            )
             return
-        
-        history.append(now)
-        await self.react_to_message(message, keyword_required)
-    
-    async def react_to_message(self, message, keyword_required):
-        read_content = self.fake_mkmui.read(message, keyword_required)
-        
-        # Do nothing if the content is not a string
-        if not isinstance(read_content, str):
-            return
-        
-        # Return a message to any empty message
-        if not read_content:
-            await message.reply(self.fake_mkmui.reply_to_empty(), mention_author=False)
-            return
-        
-        # Return the custom message if it exists
-        if message.author in self.memory:
-            await message.reply(self.memory.pop(message.author), mention_author=False)
-            return
-        
-        # Default behaviour        
-        greeting_hi_match = re.search(r'(^早+(?:晨|安|上好|呀|啊|吖)?($|[,!，！]))|(^午安$)|(^晚上好$)|(^你好$)|(^hi$)|(^hello$)', read_content, re.IGNORECASE)
-        greeting_bye_match = re.search(r'(早(?:抖|唞))|(晚(?:安))|(^8(?:9)?8+$)|(^bye$)|(^(?:bye)?(?:bi)+$)', read_content)
-        greeting_gura_match = re.search(r'(gura\b)|(\bgura)', read_content, re.IGNORECASE)
-        if greeting_hi_match:
-            await message.reply(self.fake_mkmui.reply_to_greeting(type_='hi'), mention_author=False)
-        elif greeting_bye_match:
-            await message.reply(self.fake_mkmui.reply_to_greeting(type_='bye'), mention_author=False)
-        elif greeting_gura_match:
-            await message.reply(self.fake_mkmui.reply_to_gura(), mention_author=False)
-        else:
-            await message.reply(self.fake_mkmui.reply(discord=True), mention_author=False)
     
     @tasks.loop(hours=24)
     async def cleanup(self):
+        return  # TODO: Reconstruct logic
         now = datetime.now(timezone.utc)
         expired = [user_id for user_id, until in self.ignore_until.items() if now >= until]
         for user_id in expired:
@@ -380,20 +470,32 @@ class Fake_MKMui_deploy(discord.Client):
 
 if __name__ == '__main__':
     DEBUG = False
-    token = 'Put your token here la 7.7'
     
     if DEBUG:
         fake_mkmui = Fake_MKMui()
         while True:
-            print(fake_mkmui.reply())
-            input('Press ENTER to continue; Press Ctrl+C to stop')
+            content = input('>>')
+            read_content = fake_mkmui.read(content)
+            if isinstance(read_content, str):
+                reply = fake_mkmui.reply(read_content)
+                print(reply)
     else:
         while True:
             try:
                 intents = discord.Intents.default()
                 intents.message_content = True
                 
-                fake_mkmui = Fake_MKMui_deploy(intents=intents)
+                working_dir = os.path.dirname(os.path.realpath(__file__))
+                settings_json = os.path.join(working_dir, 'settings.json')
+                with open(settings_json, 'r') as f:
+                    settings = json.load(f)
+                    
+                token = settings.pop('token')
+                
+                fake_mkmui = Fake_MKMui_deploy(
+                    intents=intents,
+                    settings=settings
+                )
                 fake_mkmui.run(token)
             except Exception as e:
                 print(f'Error: {e}\nRestarting in 10 seconds.')

@@ -1,0 +1,10 @@
+{
+    "token": "Put your token here la 7.7",
+    "trigger_limit": 8,
+    "time_window": {
+        "minutes": 1
+    },
+    "punishment_duration": {
+        "minutes": 1
+    }
+}
