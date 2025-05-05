@@ -1,6 +1,6 @@
 # MK 妹機械人
 
-模仿香港 VTuber「[MK 妹](https://www.youtube.com/channel/UCO62chyehk6pX7OitrnJAUg)」講嘢風格嘅 Discord 機械人，**限 Python 3.5 以上版本**（好似係）。
+模仿香港 VTuber「[MK 妹](https://www.youtube.com/channel/UCO62chyehk6pX7OitrnJAUg)」講嘢風格嘅 Discord 機械人，**限 Python 3.8 以上版本**（[Vermin](https://github.com/netromdk/vermin) 話嘅）。
 
 # 點架起佢？
 
