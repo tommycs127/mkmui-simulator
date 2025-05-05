@@ -6,14 +6,22 @@
 
 1. 用 `pip` 裝 `discord`，即係打 `pip install discord`；
 2. 去 [Discord 開發者介面](https://discord.com/developers/applications/)開一個新 bot；
-3. 去 `Bot` 分頁複製 token 再貼落去 `fake_mkmui.run(呢度)`，*記得係放字串*；
+3. 由 `settings_example.json` 複製一份 `settings.json`，同 `mkmui-simulator.py` 擺埋一齊；
+4. 去 `Bot` 分頁複製 token 再貼落去 `settings.json` 入面 `token` 嘅值，*記得係放字串*；
+   * 譬如你個 token 係 `u.on99.sau.pei.lah.dllm.mk.mui.no.1.ah.7head`：
+   ```jsonc
+   {
+       "token": "u.on99.sau.pei.lah.dllm.mk.mui.no.1.ah.7head",
+       // 下略...
+   }
+   ```
    * 譖氣都要講：*唔好畀人知你個 token！*
-4. 就噉開起佢，見到「`機械人個名#號碼`駕到！」即係程式正常運作緊；
-5. 去 `OAuth2` 分頁嘅 `URL Generator` 整個邀請連結；
+6. 就噉開起佢，見到「`機械人個名#號碼`駕到！」即係程式正常運作緊；
+7. 去 `OAuth2` 分頁嘅 `URL Generator` 整個邀請連結；
    * `SCOPES` 剔 `bot`
    * `BOT PERMISSIONS` 剔 `Send Messages`
-6. 貼落瀏覽器，揀你想佢入嘅伺服器；
-7. **娘娘駕到！**
+8. 貼落瀏覽器，揀你想佢入嘅伺服器；
+9. **娘娘駕到！**
 
 # 點同娘娘傾計？
 
